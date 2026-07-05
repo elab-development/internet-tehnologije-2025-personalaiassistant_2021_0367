@@ -1,0 +1,58 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: pkb
+      POSTGRES_PASSWORD: pkb_password
+      POSTGRES_DB: pkb
+    ports:
+      - "5432:5432"
+    volumes:
+      - pkb_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pkb -d pkb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - pkb_ollama_data:/root/.ollama
+
+  backend:
+    build: ./backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    environment:
+      PORT: 4000
+      DATABASE_URL: postgresql://pkb:pkb_password@postgres:5432/pkb
+      JWT_SECRET: change-me-in-production
+      JWT_EXPIRES_IN: 7d
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_CHAT_MODEL: llama3.2:1b
+      OLLAMA_EMBEDDING_MODEL: nomic-embed-text
+      EMBEDDING_DIMENSIONS: 768
+      UPLOAD_DIR: uploads
+      MAX_FILE_SIZE_MB: 20
+    volumes:
+      - pkb_uploads:/app/uploads
+    ports:
+      - "4000:4000"
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+
+volumes:
+  pkb_postgres_data:
+  pkb_ollama_data:
+  pkb_uploads:
